@@ -69,11 +69,18 @@ html, body {
 .intro[hidden] { display: none; }
 
 .introbox {
-  max-width: 640px;
+  width: min(780px, 100%);
   background: var(--panel);
   border: 1px solid var(--line);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  padding: 26px 30px 22px;
+  padding: 22px 24px;
+}
+.introbox .kicker {
+  margin: 0 0 5px;
+  color: var(--amber-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
 }
 .introbox h1 {
   margin: 0;
@@ -82,28 +89,40 @@ html, body {
   color: var(--amber);
 }
 .introbox .tagline {
-  margin: 4px 0 18px;
-  font-size: 15px;
+  margin: 4px 0 16px;
+  font-size: 14px;
   color: var(--chalk);
   letter-spacing: 0.03em;
 }
-.introbox .tagline.small {
-  font-size: 12px;
-  color: var(--amber-dim);
+.intro-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
   margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
 }
-.introbox .tagline.small b { color: var(--amber); }
-.introbox .rules {
-  margin: 0 0 20px;
-  padding-left: 20px;
-  font-size: 12.5px;
-  line-height: 1.65;
-  color: var(--dim);
+.intro-steps li { border-top: 2px solid var(--amber); padding-top: 8px; }
+.intro-steps b { display: block; margin-bottom: 4px; color: var(--chalk); font-size: 12px; }
+.intro-steps span { color: var(--dim); font-size: 11px; line-height: 1.45; }
+.intro-controls {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 14px;
+  color: var(--amber-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
-.introbox .rules li { margin-bottom: 7px; }
-.introbox .rules b { color: var(--chalk); }
-.introbox .rules i { color: var(--amber-dim); font-style: normal; }
+.intro-controls span + span::before { content: "·"; margin-right: 14px; color: var(--line); }
 .introbox .btn { width: 100%; padding: 11px; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .intro { padding: 14px; }
+  .introbox { padding: 18px; }
+  .intro-steps { grid-template-columns: 1fr; gap: 10px; }
+  .intro-controls { display: grid; gap: 4px; }
+  .intro-controls span + span::before { content: none; }
+}
 
 /* ------------------------------------------------------------------ hud */
 

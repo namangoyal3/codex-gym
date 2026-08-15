@@ -10,6 +10,40 @@ ROOT = pathlib.Path(__file__).parent
 
 
 class FrontendContractTest(unittest.TestCase):
+    def test_short_onboarding_copy_layout_and_versioned_storage(self):
+        html = (ROOT / "static/index.html").read_text()
+        css = (ROOT / "static/gym.css").read_text()
+        app = (ROOT / "static/app.js").read_text()
+
+        for copy in (
+            "YOUR REPOSITORY. TRAINING LIVE.",
+            "CODEX GYM",
+            "Watch Codex turn real engineering work into a workout.",
+            "Pick work",
+            "Click a building or choose a workout.",
+            "Watch Codex train",
+            "Edits lift. Tests sprint. Failures miss.",
+            "Verify the result",
+            "Follow the active file, tests, and Git proof.",
+            "Drag to move",
+            "Scroll to zoom",
+            "Double-click to reset",
+        ):
+            self.assertIn(copy, html)
+
+        intro = html.split('<div id="intro"', 1)[1].split("<!-- tap a building", 1)[0]
+        self.assertEqual(intro.count("<button"), 1)
+        self.assertIn('<button id="introGo" class="btn primary">ENTER THE GYM</button>', intro)
+        self.assertIn('<button id="helpBtn" class="btn ghost">HOW TO PLAY</button>', html)
+
+        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("@media (max-width: 640px)", css)
+        mobile = css.split("@media (max-width: 640px)", 1)[1]
+        self.assertIn("grid-template-columns: 1fr;", mobile)
+
+        self.assertIn("'codexgym.onboarding.v2'", app)
+        self.assertNotIn("'codexgym.seen'", app)
+
     def test_game_surface_and_proof_strip_are_present(self):
         html = (ROOT / "static/index.html").read_text()
         css = (ROOT / "static/gym.css").read_text()

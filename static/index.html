@@ -13,18 +13,19 @@
 <div class="vignette" aria-hidden="true"></div>
 
 <!-- first run: say what this is before showing it -->
-<div id="intro" class="intro" hidden>
+<div id="intro" class="intro" role="dialog" aria-modal="true" aria-labelledby="introTitle" hidden>
   <div class="introbox">
-    <h1>CODEX GYM</h1>
-    <p class="tagline">Your project is a training base. Your Codex agent is the athlete.</p>
-    <ol class="rules">
-      <li><b>Every folder is a training station.</b> Source code gets a power rack, tests get a bank of treadmills, config gets a dumbbell rack, docs get a stretch studio, markup gets a boxing ring. The number on the sign is how many files are inside; the bigger and more loaded the station, the more code it holds.</li>
-      <li><b>Tap a station to put the agent to work there.</b> Add tests, document it, break it up, tidy it. You never write a prompt — the base does that for you.</li>
-      <li><b>Watch it train.</b> The athlete walks to the station it is working on. Writing a file is a <i>deadlift</i>, running tests is a <i>sprint</i>, reading code is <i>walking the floor</i>, and a failed command is a <i>missed rep</i>.</li>
-      <li><b>Stamina is its memory.</b> It drains as the job gets longer and comes back when the agent clears its head.</li>
-      <li><b>PROJECT shows where you are</b> — from PLANNED all the way to SHIPPED — read live from git and from whether your tests pass.</li>
+    <p class="kicker">YOUR REPOSITORY. TRAINING LIVE.</p>
+    <h1 id="introTitle">CODEX GYM</h1>
+    <p class="tagline">Watch Codex turn real engineering work into a workout.</p>
+    <ol class="intro-steps">
+      <li><b>Pick work</b><span>Click a building or choose a workout.</span></li>
+      <li><b>Watch Codex train</b><span>Edits lift. Tests sprint. Failures miss.</span></li>
+      <li><b>Verify the result</b><span>Follow the active file, tests, and Git proof.</span></li>
     </ol>
-    <p class="tagline small">No project yet? Press <b>+ NEW</b> and it builds you a real one to train on. Drag to pan, scroll to zoom.</p>
+    <div class="intro-controls" aria-label="Controls">
+      <span>Drag to move</span><span>Scroll to zoom</span><span>Double-click to reset</span>
+    </div>
     <button id="introGo" class="btn primary">ENTER THE GYM</button>
   </div>
 </div>
@@ -71,7 +72,7 @@
   <!-- the key: without this nobody can read the floor -->
   <section class="panel legend">
     <header><h2>HOW TO READ THE GYM</h2><span class="rule"></span>
-      <button id="helpBtn" class="btn ghost">RULES</button>
+      <button id="helpBtn" class="btn ghost">HOW TO PLAY</button>
       <button id="sndBtn" class="btn ghost" aria-pressed="true">SOUND ON</button>
     </header>
     <div class="lgrid" id="kinds"></div>

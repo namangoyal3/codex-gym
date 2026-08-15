@@ -1137,7 +1137,7 @@ const introEl = $('intro');
 function showIntro() { introEl.hidden = false; }
 function hideIntro() {
   introEl.hidden = true;
-  try { localStorage.setItem('codexgym.seen', '1'); } catch (e) { /* private mode */ }
+  try { localStorage.setItem('codexgym.onboarding.v2', '1'); } catch (e) { /* private mode */ }
 }
 $('introGo').onclick = hideIntro;
 $('helpBtn').onclick = showIntro;
@@ -1146,7 +1146,7 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !introEl.hidden) hideIntro();
 });
 let seen = null;
-try { seen = localStorage.getItem('codexgym.seen'); } catch (e) { /* ignore */ }
+try { seen = localStorage.getItem('codexgym.onboarding.v2'); } catch (e) { /* ignore */ }
 if (!seen) showIntro();
 
 connect();
