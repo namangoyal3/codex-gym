@@ -1385,17 +1385,19 @@ class Handler(BaseHTTPRequestHandler):
             if not text:
                 return self._json(400, {"error": "say something first"})
             level = DIFFICULTY.get(body.get("difficulty") or "normal") or DIFFICULTY["normal"]
+            model = body.get("model") or level["model"]
+            effort = body.get("effort") or level["effort"]
             resume = self.gym.thread_id if body.get("resume") is not False else None
             self.gym.say("you", text)
             try:
-                dispatch(self.gym, text, level["model"], level["effort"],
+                dispatch(self.gym, text, model, effort,
                          body.get("sandbox") or "workspace-write",
                          self.gym.stats["root"], resume=resume)
             except ValueError as exc:
                 # a fresh session is the right fallback when the old one is gone
                 if resume:
                     try:
-                        dispatch(self.gym, text, level["model"], level["effort"],
+                        dispatch(self.gym, text, model, effort,
                                  body.get("sandbox") or "workspace-write",
                                  self.gym.stats["root"])
                         return self._json(200, {"ok": True, "resumed": False})
@@ -1484,7 +1486,7 @@ STAGES = [
 
 
 def git(root, *args, **kw):
-    """Run a read-only git command. Returns stripped stdout, or None."""
+    """Run a read-only git command. Returns right-stripped stdout, or None."""
     exe = shutil.which("git")
     if not exe or not os.path.isdir(root):
         return None
@@ -1496,7 +1498,7 @@ def git(root, *args, **kw):
         return None
     if p.returncode != 0:
         return None
-    return p.stdout.strip()
+    return p.stdout.rstrip()
 
 
 def project_state(gym):

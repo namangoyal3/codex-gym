@@ -3,6 +3,7 @@
 import { iso, buildGround, drawStation, shade, TW, TH } from './iso.js';
 import { layoutBase, drawBuilding, hitBuilding, buildingAnchor, KIND_LOOK } from './building.js';
 import { Animator, drawAthlete } from './athlete.js';
+import { createAthlete3D } from './athlete3d.js';
 import * as sfx from './sfx.js';
 
 const BUF_W = 800, BUF_H = 450;
@@ -23,9 +24,16 @@ cv.width = BUF_W; cv.height = BUF_H;
 ctx.imageSmoothingEnabled = false;
 
 const acv = $('arena');
-const actx = acv.getContext('2d');
-acv.width = ARENA_W; acv.height = ARENA_H;
-actx.imageSmoothingEnabled = false;
+let athlete3d = null;
+let actx = null;
+try {
+  athlete3d = createAthlete3D(acv);
+} catch (e) {
+  // ponytail: keep the proven 2D athlete when WebGL is unavailable.
+  actx = acv.getContext('2d');
+  acv.width = ARENA_W; acv.height = ARENA_H;
+  actx.imageSmoothingEnabled = false;
+}
 
 const S = {
   view: null, floor: null, stats: null, hud: {}, records: {},
@@ -115,7 +123,11 @@ function renderFloorMeta() {
 
 // A persistent close-up of the lift. The floor answers "where in my repo?"; at
 // wide zoom the lifter is 30px tall, so this panel answers "what is happening?"
-function drawArena(now) {
+function drawArena(now, dt) {
+  if (athlete3d) {
+    athlete3d.render(dt);
+    return;
+  }
   const g = actx.createLinearGradient(0, 0, 0, ARENA_H);
   g.addColorStop(0, '#1d4450');
   g.addColorStop(1, '#2b5a63');
@@ -162,8 +174,8 @@ function paintArena() {
     ? `${h.active_kg || 20}kg on the bar` : '';
   // the coach's own words: what the athlete is doing, in plain English
   $('aFile').textContent = S.lastSays || h.active_file || 'waiting for the agent';
-  const e = S.activePath && S.view ? S.view.fileByPath.get(S.activePath) : null;
-  $('arenaZone').textContent = e ? `${e.loc} LOC · ${e.kg}kg` : '—';
+  const caption = S.lastSays || h.active_file || (S.running ? 'Codex is working…' : 'Ready for a new workout');
+  $('arenaZone').textContent = caption;
 }
 
 const LIFT_NAME = {
@@ -230,7 +242,7 @@ function frame(now) {
     }
 
     draw(dt, now);
-    drawArena(now);
+    drawArena(now, dt);
     paintArena();
   }
   requestAnimationFrame(frame);
@@ -424,6 +436,26 @@ function escape_(s) {
   return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
 
+function setExperienceState(state, message) {
+  document.body.dataset.experience = state;
+  if (message) $('arenaZone').textContent = message;
+  const active = state === 'starting' || state === 'working';
+  if (active) $('resultCard').hidden = true;
+}
+
+function showResult(status) {
+  const text = S.result || (status === 'stopped' ? 'The workout was stopped.' : 'Codex finished the workout.');
+  $('resultMessage').textContent = text;
+  const bits = [`${S.hud.reps || 0} reps`];
+  if (S.project && S.project.dirty_n) bits.push(`${S.project.dirty_n} files changed`);
+  if (S.project && S.project.tests === true) bits.push('tests passing');
+  if (S.project && S.project.tests === false) bits.push('tests failing');
+  $('resultStats').textContent = bits.join(' · ');
+  $('resultCard').hidden = false;
+  setExperienceState(status === 'completed' ? 'complete' : status);
+  athlete3d?.setExercise(status === 'completed' ? 'pr' : 'fail');
+}
+
 // ------------------------------------------------------------------- SSE
 
 function apply(m) {
@@ -437,6 +469,11 @@ function apply(m) {
       if (m.chat && m.chat.length) { chatEl.innerHTML = ''; m.chat.forEach(chatBubble); }
       paintHud(); paintRecords(); paintRunning();
       paintReplay(); paintAsk(m.question);
+      S.result = m.result || null;
+      if (!m.running && m.status && !['idle', 'running'].includes(m.status) && !m.question) {
+        showResult(m.status);
+      }
+      else setExperienceState(m.question ? 'needs-answer' : m.running ? 'working' : 'ready');
       break;
     case 'floor':
       loadFloor(m.zones, m.stats);
@@ -463,6 +500,7 @@ function apply(m) {
       Object.assign(S.hud, m);
       if (m.exercise === 'chalk') anim.setIdle('chalk');
       if (m.state === 'RESTING' || m.state === 'DONE') anim.setIdle('racked');
+      if (m.exercise) athlete3d?.setExercise(m.exercise, { restart: false });
       paintHud();
       break;
     case 'set_start':
@@ -476,6 +514,7 @@ function apply(m) {
       sfx.play('setStart');
       feedRow({ kind: 'note', text: `— SET ${m.set} —`, tone: 'cue' });
       paintHud();
+      setExperienceState('working', 'Codex is warming up…');
       break;
     case 'set_end': {
       anim.setIdle('racked');
@@ -497,6 +536,7 @@ function apply(m) {
     case 'rep': {
       idleSince = performance.now();
       anim.push(m.exercise);
+      athlete3d?.setExercise(m.ok ? m.exercise : 'fail');
       anim.flash();
       if (m.path) focusOn(m.path);
       S.hud.exercise = m.exercise;
@@ -511,6 +551,7 @@ function apply(m) {
       if (['deadlift', 'squat', 'bench', 'press', 'run'].includes(m.exercise)) anim.setIdle(m.exercise);   // keep training between reps
       feedRow(m);
       paintHud();
+      setExperienceState('working', m.says || m.detail || 'Codex is working…');
       break;
     }
     case 'record':
@@ -518,10 +559,12 @@ function apply(m) {
       shake = 4;
       sfx.play('pr');
       feedRow(m);
+      athlete3d?.setExercise('pr');
       break;
     case 'asking':
       paintAsk(m.question);
       if (m.question) sfx.play('asking');
+      if (m.question) setExperienceState('needs-answer', 'Codex needs your answer');
       break;
     case 'replay':
       S.replaying = m.replaying;
@@ -532,6 +575,18 @@ function apply(m) {
       break;
     case 'chat':
       chatBubble(m);
+      break;
+    case 'result':
+      S.result = m.text || '';
+      break;
+    case 'lifecycle':
+      if (m.status === 'running') {
+        setExperienceState('working', 'Codex is working…');
+        athlete3d?.setExercise('chalk');
+      } else if (['completed', 'stopped', 'failed'].includes(m.status)) {
+        if (S.question) break;
+        showResult(m.status);
+      }
       break;
     case 'records':
       S.records = m.records; paintRecords();
@@ -555,6 +610,7 @@ function paintRunning() {
   document.querySelectorAll('.quest').forEach((b) => { b.disabled = S.running; });
   document.querySelectorAll('.bma').forEach((b) => { b.disabled = S.running; });
   document.body.classList.toggle('live', S.running);
+  if (S.running) setExperienceState('working');
 }
 
 function connect() {
@@ -574,14 +630,25 @@ async function post(url, body) {
 }
 
 $('train').onclick = async () => {
-  const res = await post('/api/train', {
-    prompt: $('prompt').value,
+  const text = $('prompt').value.trim();
+  if (!text) return;
+  setExperienceState('starting', 'Starting Codex…');
+  const res = await post('/api/chat', {
+    text,
+    difficulty: S.difficulty,
     model: $('modelSel').value || null,
     effort: $('effortSel').value,
     sandbox: $('spotterSel').value,
-    cwd: S.stats.root,
+    resume: S.freshNext ? false : undefined,
   });
-  if (res.error) feedRow({ kind: 'note', tone: 'bad', text: 'CANNOT TRAIN: ' + res.error });
+  if (res.error) {
+    setExperienceState('ready', res.error);
+    feedRow({ kind: 'note', tone: 'bad', text: 'CANNOT START: ' + res.error });
+    return;
+  }
+  S.freshNext = false;
+  S.result = null;
+  $('prompt').value = '';
 };
 $('rack').onclick = () => post('/api/rack', {});
 $('prompt').onkeydown = (e) => {
