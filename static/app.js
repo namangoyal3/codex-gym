@@ -3,6 +3,7 @@
 import { iso, buildGround, drawStation, shade, TW, TH } from './iso.js';
 import { layoutBase, drawBuilding, hitBuilding, buildingAnchor, KIND_LOOK } from './building.js';
 import { Animator, drawAthlete } from './athlete.js';
+import { demoSnapshot, demoTimeline } from './demo.js';
 import * as sfx from './sfx.js';
 
 const BUF_W = 800, BUF_H = 450;
@@ -1159,5 +1160,36 @@ let seen = null;
 try { seen = localStorage.getItem('codexgym.onboarding.v2'); } catch (e) { /* ignore */ }
 if (!seen) showIntro();
 
-connect();
+let demoRunning = false;
+async function runDemo() {
+  if (demoRunning) return;
+  demoRunning = true;
+  const button = $('demoBtn');
+  button.disabled = true;
+  button.textContent = 'DEMO PLAYING';
+  try {
+    if (!introEl.hidden) hideIntro();
+    apply(demoSnapshot());
+    let elapsed = 0;
+    for (const step of demoTimeline()) {
+      await new Promise((resolve) => setTimeout(resolve, step.at - elapsed));
+      elapsed = step.at;
+      apply(step.event);
+    }
+    button.textContent = 'REPLAY DEMO';
+  } catch (error) {
+    setProofPhase(null, 'DEMO ERROR · Reload the page and try again.');
+    button.textContent = 'RETRY DEMO';
+  } finally {
+    demoRunning = false;
+    button.disabled = false;
+  }
+}
+$('demoBtn').onclick = runDemo;
+
+if (['localhost', '127.0.0.1'].includes(location.hostname)) connect();
+else {
+  apply(demoSnapshot());
+  $('conn').textContent = 'DEMO';
+}
 requestAnimationFrame(frame);
