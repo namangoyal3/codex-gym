@@ -3,6 +3,7 @@
 import { iso, buildGround, drawStation, shade, TW, TH } from './iso.js';
 import { layoutBase, drawBuilding, hitBuilding, buildingAnchor, KIND_LOOK } from './building.js';
 import { Animator, drawAthlete } from './athlete.js';
+import { demoSnapshot, demoTimeline } from './demo.js';
 import * as sfx from './sfx.js';
 
 const BUF_W = 800, BUF_H = 450;
@@ -162,8 +163,8 @@ function paintArena() {
     ? `${h.active_kg || 20}kg on the bar` : '';
   // the coach's own words: what the athlete is doing, in plain English
   $('aFile').textContent = S.lastSays || h.active_file || 'waiting for the agent';
-  const e = S.activePath && S.view ? S.view.fileByPath.get(S.activePath) : null;
-  $('arenaZone').textContent = e ? `${e.loc} LOC · ${e.kg}kg` : '—';
+  const caption = S.lastSays || h.active_file || (S.running ? 'Codex is working…' : 'Ready for a new workout');
+  $('arenaZone').textContent = caption;
 }
 
 const LIFT_NAME = {
@@ -230,7 +231,7 @@ function frame(now) {
     }
 
     draw(dt, now);
-    drawArena(now);
+    drawArena(now, dt);
     paintArena();
   }
   requestAnimationFrame(frame);
@@ -424,6 +425,13 @@ function escape_(s) {
   return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
 
+function setProofPhase(phase, summary) {
+  document.querySelectorAll('[data-proof]').forEach((el) => {
+    el.classList.toggle('on', el.dataset.proof === phase);
+  });
+  $('proofSummary').textContent = summary;
+}
+
 // ------------------------------------------------------------------- SSE
 
 function apply(m) {
@@ -434,9 +442,19 @@ function apply(m) {
       S.replaying = m.replaying || null;
       FEED.innerHTML = '';
       m.feed.forEach(feedRow);
-      if (m.chat && m.chat.length) { chatEl.innerHTML = ''; m.chat.forEach(chatBubble); }
+      chatEl.innerHTML = '';
+      if (m.chat && m.chat.length) m.chat.forEach(chatBubble);
+      else chatEl.innerHTML = '<div class="chatempty">Tell the athlete what to do. Every message runs Codex in your '
+        + 'project and keeps the same session, so you can follow up.</div>';
       paintHud(); paintRecords(); paintRunning();
       paintReplay(); paintAsk(m.question);
+      if (m.project) paintProject(m.project);
+      S.result = m.result || null;
+      if (m.question) setProofPhase(null, `BLOCKED · ${m.question}`);
+      else if (m.running) setProofPhase('select', 'TRAINING · Codex is selecting the next action.');
+      else if (m.status && ['completed', 'stopped', 'failed'].includes(m.status)) {
+        setProofPhase('result', `${m.status.toUpperCase()} · ${m.result || 'The workout ended.'}`);
+      } else setProofPhase('select', 'Choose a task to start.');
       break;
     case 'floor':
       loadFloor(m.zones, m.stats);
@@ -496,6 +514,7 @@ function apply(m) {
     }
     case 'rep': {
       idleSince = performance.now();
+      const testing = m.exercise === 'run' || (m.exercise === 'fail' && S.hud.exercise === 'run');
       anim.push(m.exercise);
       anim.flash();
       if (m.path) focusOn(m.path);
@@ -511,6 +530,11 @@ function apply(m) {
       if (['deadlift', 'squat', 'bench', 'press', 'run'].includes(m.exercise)) anim.setIdle(m.exercise);   // keep training between reps
       feedRow(m);
       paintHud();
+      if (testing) {
+        setProofPhase('verify', `${m.ok ? 'PASS' : 'FAIL'} · ${m.detail || m.says || 'Test finished.'}`);
+      } else if (m.exercise === 'deadlift' || m.path) {
+        setProofPhase('edit', [m.path, m.detail].filter(Boolean).join(' · ') || 'Codex changed a file.');
+      }
       break;
     }
     case 'record':
@@ -522,6 +546,7 @@ function apply(m) {
     case 'asking':
       paintAsk(m.question);
       if (m.question) sfx.play('asking');
+      if (m.question) setProofPhase(null, `BLOCKED · ${m.question}`);
       break;
     case 'replay':
       S.replaying = m.replaying;
@@ -532,6 +557,21 @@ function apply(m) {
       break;
     case 'chat':
       chatBubble(m);
+      break;
+    case 'result':
+      S.result = m.text || '';
+      break;
+    case 'lifecycle':
+      if (m.status === 'running') {
+        S.result = null;
+        setProofPhase('select', 'TRAINING · Codex is selecting the next action.');
+      } else if (['completed', 'stopped', 'failed'].includes(m.status)) {
+        if (S.question) break;
+        const result = m.status === 'stopped' ? 'The workout was stopped.'
+          : m.error || S.result || (m.status === 'completed' ? 'Codex completed the workout.' : 'The workout failed.');
+        setProofPhase('result', `${m.status.toUpperCase()} · ${result}`);
+        anim.setIdle(m.status === 'completed' ? 'pr' : 'fail');
+      }
       break;
     case 'records':
       S.records = m.records; paintRecords();
@@ -557,9 +597,15 @@ function paintRunning() {
   document.body.classList.toggle('live', S.running);
 }
 
+let eventSource = null;
 function connect() {
+  if (eventSource) eventSource.close();
   const es = new EventSource('/api/events');
-  es.onmessage = (ev) => { try { apply(JSON.parse(ev.data)); } catch (e) { /* skip */ } };
+  eventSource = es;
+  es.onmessage = (ev) => {
+    if (demoRunning) return;
+    try { apply(JSON.parse(ev.data)); } catch (e) { /* skip */ }
+  };
   es.onerror = () => { $('conn').textContent = 'RECONNECTING'; };
   es.onopen = () => { $('conn').textContent = 'LIVE'; };
 }
@@ -574,14 +620,25 @@ async function post(url, body) {
 }
 
 $('train').onclick = async () => {
-  const res = await post('/api/train', {
-    prompt: $('prompt').value,
+  const text = $('prompt').value.trim();
+  if (!text) return;
+  setProofPhase('select', 'STARTING · Codex is entering the gym.');
+  const res = await post('/api/chat', {
+    text,
+    difficulty: S.difficulty,
     model: $('modelSel').value || null,
     effort: $('effortSel').value,
     sandbox: $('spotterSel').value,
-    cwd: S.stats.root,
+    resume: S.freshNext ? false : undefined,
   });
-  if (res.error) feedRow({ kind: 'note', tone: 'bad', text: 'CANNOT TRAIN: ' + res.error });
+  if (res.error) {
+    setProofPhase('select', `READY · ${res.error}`);
+    feedRow({ kind: 'note', tone: 'bad', text: 'CANNOT START: ' + res.error });
+    return;
+  }
+  S.freshNext = false;
+  S.result = null;
+  $('prompt').value = '';
 };
 $('rack').onclick = () => post('/api/rack', {});
 $('prompt').onkeydown = (e) => {
@@ -1088,10 +1145,20 @@ document.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 // ----------------------------------------------------------------- intro
 
 const introEl = $('intro');
-function showIntro() { introEl.hidden = false; }
+const hud = document.querySelector('.hud');
+let introOpener = null;
+function showIntro() {
+  introOpener = document.activeElement;
+  hud.inert = true;
+  introEl.hidden = false;
+  $('introGo').focus();
+}
 function hideIntro() {
   introEl.hidden = true;
-  try { localStorage.setItem('codexgym.seen', '1'); } catch (e) { /* private mode */ }
+  hud.inert = false;
+  if (introOpener && introOpener.isConnected) introOpener.focus();
+  introOpener = null;
+  try { localStorage.setItem('codexgym.onboarding.v2', '1'); } catch (e) { /* private mode */ }
 }
 $('introGo').onclick = hideIntro;
 $('helpBtn').onclick = showIntro;
@@ -1100,8 +1167,46 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !introEl.hidden) hideIntro();
 });
 let seen = null;
-try { seen = localStorage.getItem('codexgym.seen'); } catch (e) { /* ignore */ }
+try { seen = localStorage.getItem('codexgym.onboarding.v2'); } catch (e) { /* ignore */ }
 if (!seen) showIntro();
 
-connect();
+const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+let demoRunning = false;
+async function runDemo() {
+  if (demoRunning) return;
+  demoRunning = true;
+  const button = $('demoBtn');
+  button.disabled = true;
+  button.textContent = 'DEMO PLAYING';
+  try {
+    if (!introEl.hidden) hideIntro();
+    if (isLocal && eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    apply(demoSnapshot());
+    let elapsed = 0;
+    for (const step of demoTimeline()) {
+      await new Promise((resolve) => setTimeout(resolve, step.at - elapsed));
+      elapsed = step.at;
+      apply(step.event);
+    }
+    if (isLocal) await new Promise((resolve) => setTimeout(resolve, 2500));
+    button.textContent = 'REPLAY DEMO';
+  } catch (error) {
+    setProofPhase(null, 'DEMO ERROR · Reload the page and try again.');
+    button.textContent = 'RETRY DEMO';
+  } finally {
+    demoRunning = false;
+    if (isLocal) connect();
+    button.disabled = false;
+  }
+}
+$('demoBtn').onclick = runDemo;
+
+if (isLocal) connect();
+else {
+  apply(demoSnapshot());
+  $('conn').textContent = 'DEMO';
+}
 requestAnimationFrame(frame);
