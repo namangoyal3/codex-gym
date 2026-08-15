@@ -1,3 +1,20 @@
+function demoProject(stage) {
+  return {
+    git: true, branch: 'demo/codex-gym', dirty: [], dirty_n: 0, ahead: 0,
+    upstream: true, last_commit: 'demo baseline', tests: null,
+    stages: [
+      { name: 'PLANNED', note: 'task selected' },
+      { name: 'TRAINING', note: 'code changed' },
+      { name: 'SPOTTER', note: 'no blocker' },
+      { name: 'VERIFY', note: 'tests ran' },
+      { name: 'CLEAN', note: 'tests pass' },
+      { name: 'LOGGED', note: 'commit ready' },
+      { name: 'SHIPPED', note: 'ready to push' },
+    ],
+    stage,
+  };
+}
+
 export function demoSnapshot() {
   return {
     kind: 'snapshot',
@@ -28,6 +45,7 @@ export function demoSnapshot() {
       volume_lines: 7420, total_reps: 146, total_sets: 42,
     },
     feed: [{ kind: 'note', tone: 'coach', text: 'DEMO READY · Watch Codex change and verify the project.' }],
+    project: demoProject(0),
     chat: [], running: false, replaying: null, question: null, status: 'idle', result: null,
   };
 }
@@ -54,18 +72,8 @@ export function demoTimeline() {
       says: 'running the test suite',
     } },
     { at: 11000, event: { kind: 'project', project: {
-      git: true, branch: 'demo/codex-gym', dirty: ['src/hello.py'], dirty_n: 1, ahead: 1,
-      upstream: true, last_commit: 'demo Add format_name', tests: true,
-      stages: [
-        { name: 'PLANNED', note: 'task selected' },
-        { name: 'TRAINING', note: 'code changed' },
-        { name: 'SPOTTER', note: 'no blocker' },
-        { name: 'VERIFY', note: 'tests ran' },
-        { name: 'CLEAN', note: 'tests pass' },
-        { name: 'LOGGED', note: 'commit ready' },
-        { name: 'SHIPPED', note: 'ready to push' },
-      ],
-      stage: 4,
+      ...demoProject(4), dirty: ['src/hello.py'], dirty_n: 1, ahead: 1,
+      last_commit: 'demo Add format_name', tests: true,
     } } },
     { at: 12400, event: { kind: 'record', text: 'TEST SUITE PASSED · 8/8' } },
     { at: 13600, event: {

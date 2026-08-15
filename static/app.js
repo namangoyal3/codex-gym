@@ -442,9 +442,13 @@ function apply(m) {
       S.replaying = m.replaying || null;
       FEED.innerHTML = '';
       m.feed.forEach(feedRow);
-      if (m.chat && m.chat.length) { chatEl.innerHTML = ''; m.chat.forEach(chatBubble); }
+      chatEl.innerHTML = '';
+      if (m.chat && m.chat.length) m.chat.forEach(chatBubble);
+      else chatEl.innerHTML = '<div class="chatempty">Tell the athlete what to do. Every message runs Codex in your '
+        + 'project and keeps the same session, so you can follow up.</div>';
       paintHud(); paintRecords(); paintRunning();
       paintReplay(); paintAsk(m.question);
+      if (m.project) paintProject(m.project);
       S.result = m.result || null;
       if (m.question) setProofPhase(null, `BLOCKED · ${m.question}`);
       else if (m.running) setProofPhase('select', 'TRAINING · Codex is selecting the next action.');
@@ -593,8 +597,11 @@ function paintRunning() {
   document.body.classList.toggle('live', S.running);
 }
 
+let eventSource = null;
 function connect() {
+  if (eventSource) eventSource.close();
   const es = new EventSource('/api/events');
+  eventSource = es;
   es.onmessage = (ev) => {
     if (demoRunning) return;
     try { apply(JSON.parse(ev.data)); } catch (e) { /* skip */ }
@@ -1163,6 +1170,7 @@ let seen = null;
 try { seen = localStorage.getItem('codexgym.onboarding.v2'); } catch (e) { /* ignore */ }
 if (!seen) showIntro();
 
+const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 let demoRunning = false;
 async function runDemo() {
   if (demoRunning) return;
@@ -1172,6 +1180,10 @@ async function runDemo() {
   button.textContent = 'DEMO PLAYING';
   try {
     if (!introEl.hidden) hideIntro();
+    if (isLocal && eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
     apply(demoSnapshot());
     let elapsed = 0;
     for (const step of demoTimeline()) {
@@ -1179,18 +1191,20 @@ async function runDemo() {
       elapsed = step.at;
       apply(step.event);
     }
+    if (isLocal) await new Promise((resolve) => setTimeout(resolve, 2500));
     button.textContent = 'REPLAY DEMO';
   } catch (error) {
     setProofPhase(null, 'DEMO ERROR · Reload the page and try again.');
     button.textContent = 'RETRY DEMO';
   } finally {
     demoRunning = false;
+    if (isLocal) connect();
     button.disabled = false;
   }
 }
 $('demoBtn').onclick = runDemo;
 
-if (['localhost', '127.0.0.1'].includes(location.hostname)) connect();
+if (isLocal) connect();
 else {
   apply(demoSnapshot());
   $('conn').textContent = 'DEMO';
