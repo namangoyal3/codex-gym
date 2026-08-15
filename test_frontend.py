@@ -38,6 +38,38 @@ class FrontendContractTest(unittest.TestCase):
             html.index('<section class="panel pipeline">'),
         )
 
+    def test_live_events_drive_the_proof_flow(self):
+        app = (ROOT / "static/app.js").read_text()
+
+        self.assertIn("function setProofPhase(phase, summary)", app)
+        self.assertIn("document.querySelectorAll('[data-proof]')", app)
+        self.assertIn("el.classList.toggle('on', el.dataset.proof === phase)", app)
+        self.assertIn("$('proofSummary').textContent = summary", app)
+
+        snapshot = app.split("case 'snapshot':", 1)[1].split("case 'floor':", 1)[0]
+        rep = app.split("case 'rep':", 1)[1].split("case 'record':", 1)[0]
+        asking = app.split("case 'asking':", 1)[1].split("case 'replay':", 1)[0]
+        lifecycle = app.split("case 'lifecycle':", 1)[1].split("case 'records':", 1)[0]
+
+        self.assertIn("setProofPhase(", snapshot)
+        self.assertIn("setProofPhase('edit'", rep)
+        self.assertIn("setProofPhase('verify'", rep)
+        self.assertIn("setProofPhase(", asking)
+        self.assertIn("setProofPhase('select'", lifecycle)
+        self.assertIn("setProofPhase('result'", lifecycle)
+        self.assertIn("['completed', 'stopped', 'failed']", lifecycle)
+
+        for redesign_only in (
+            "./athlete3d.js",
+            "createAthlete3D",
+            "athlete3d",
+            "resultCard",
+            "resultMessage",
+            "resultStats",
+            "setExperienceState",
+        ):
+            self.assertNotIn(redesign_only, app)
+
     def test_git_porcelain_keeps_leading_status_column(self):
         with tempfile.TemporaryDirectory() as root:
             subprocess.run(["git", "init", "-q"], cwd=root, check=True)
