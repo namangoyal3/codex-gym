@@ -44,6 +44,13 @@ class FrontendContractTest(unittest.TestCase):
         self.assertIn("'codexgym.onboarding.v2'", app)
         self.assertNotIn("'codexgym.seen'", app)
 
+        show_intro = app.split("function showIntro()", 1)[1].split("function hideIntro()", 1)[0]
+        hide_intro = app.split("function hideIntro()", 1)[1].split("$('introGo').onclick", 1)[0]
+        self.assertIn("introOpener = document.activeElement", show_intro)
+        self.assertIn("$('introGo').focus()", show_intro)
+        self.assertIn("introOpener && introOpener.isConnected", hide_intro)
+        self.assertIn("introOpener.focus()", hide_intro)
+
     def test_game_surface_and_proof_strip_are_present(self):
         html = (ROOT / "static/index.html").read_text()
         css = (ROOT / "static/gym.css").read_text()
