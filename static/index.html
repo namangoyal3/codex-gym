@@ -1,114 +1,296 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#090b0d">
-  <title>Codex Gym</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23090b0d'/%3E%3Cpath d='M4 5h8v6H4z' fill='%23f26a3d'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/gym.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex Gym</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23091a20'/%3E%3Crect x='2' y='6' width='2' height='4' fill='%23e03b2f'/%3E%3Crect x='12' y='6' width='2' height='4' fill='%23e03b2f'/%3E%3Crect x='4' y='7' width='8' height='2' fill='%23ffb020'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/gym.css">
 </head>
 <body>
-  <main id="workoutStage" class="workout-stage">
-    <canvas id="stage" aria-label="Interactive project gym"></canvas>
-    <div class="vignette" aria-hidden="true"></div>
 
-    <header class="topbar">
-      <a class="brand" href="#workoutStage" aria-label="Codex Gym home"><span class="brand-mark">C</span><span>Codex Gym</span></a>
-      <div class="repo-title"><strong id="repo">—</strong><span id="conn" class="status-dot">…</span></div>
-      <nav aria-label="Workspace panels">
-        <button type="button" class="top-action" popovertarget="projectDrawer">Project</button>
-        <button type="button" class="top-action" popovertarget="activityDrawer">Activity</button>
-        <button type="button" class="icon-action" popovertarget="settingsDrawer" aria-label="Open settings">⚙</button>
-      </nav>
+<canvas id="stage" aria-label="Isometric gym floor built from your repository"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+
+<!-- first run: say what this is before showing it -->
+<div id="intro" class="intro" hidden>
+  <div class="introbox">
+    <h1>CODEX GYM</h1>
+    <p class="tagline">Your project is a training base. Your Codex agent is the athlete.</p>
+    <ol class="rules">
+      <li><b>Every folder is a training station.</b> Source code gets a power rack, tests get a bank of treadmills, config gets a dumbbell rack, docs get a stretch studio, markup gets a boxing ring. The number on the sign is how many files are inside; the bigger and more loaded the station, the more code it holds.</li>
+      <li><b>Tap a station to put the agent to work there.</b> Add tests, document it, break it up, tidy it. You never write a prompt — the base does that for you.</li>
+      <li><b>Watch it train.</b> The athlete walks to the station it is working on. Writing a file is a <i>deadlift</i>, running tests is a <i>sprint</i>, reading code is <i>walking the floor</i>, and a failed command is a <i>missed rep</i>.</li>
+      <li><b>Stamina is its memory.</b> It drains as the job gets longer and comes back when the agent clears its head.</li>
+      <li><b>PROJECT shows where you are</b> — from PLANNED all the way to SHIPPED — read live from git and from whether your tests pass.</li>
+    </ol>
+    <p class="tagline small">No project yet? Press <b>+ NEW</b> and it builds you a real one to train on. Drag to pan, scroll to zoom.</p>
+    <button id="introGo" class="btn primary">ENTER THE GYM</button>
+  </div>
+</div>
+
+<!-- tap a building: this is the control surface, not a readout -->
+<div id="bmenu" class="bmenu" hidden>
+  <header>
+    <h2 id="bmName">—</h2><span class="rule"></span>
+    <button id="bmClose" class="btn ghost">✕</button>
+  </header>
+  <div class="bmkind" id="bmKind">—</div>
+  <div class="sub" id="bmPath">—</div>
+  <div class="bmstats" id="bmStats">—</div>
+  <div class="bmfiles" id="bmFiles"></div>
+  <div class="bmlbl">SEND THE ATHLETE TO TRAIN HERE</div>
+  <div class="bmactions" id="bmActions"></div>
+</div>
+
+<div class="hud">
+
+  <!-- which gym -->
+  <section class="panel tl">
+    <header><h1>CODEX GYM</h1><span class="rule"></span>
+      <button id="newGymBtn" class="btn ghost">+ NEW</button>
+      <span id="conn" class="tag">…</span>
+    </header>
+    <div class="big" id="repo">—</div>
+    <div class="sub" id="floorStats">—</div>
+    <label class="field">
+      <span>FLOOR</span>
+      <select id="repoSel"></select>
+    </label>
+    <div id="newGymBox" hidden>
+      <div class="sub">Creates a small starter project you can train on.</div>
+      <input id="newGymName" type="text" placeholder="my-first-gym" maxlength="40">
+      <div class="actions">
+        <button id="newGymGo" class="btn primary">BUILD IT</button>
+        <button id="newGymCancel" class="btn">CANCEL</button>
+      </div>
+    </div>
+    <div class="sub warn" id="truncNote"></div>
+  </section>
+
+  <!-- the key: without this nobody can read the floor -->
+  <section class="panel legend">
+    <header><h2>HOW TO READ THE GYM</h2><span class="rule"></span>
+      <button id="helpBtn" class="btn ghost">RULES</button>
+      <button id="sndBtn" class="btn ghost" aria-pressed="true">SOUND ON</button>
+    </header>
+    <div class="lgrid" id="kinds"></div>
+    <div class="lnote"><b>NUMBER</b> = files in that folder · <b>SIZE + PLATES</b> = lines of code</div>
+    <div class="lnote"><b>TAP A STATION</b> to put the agent to work there · drag to pan · scroll to zoom</div>
+  </section>
+
+  <!-- vitals -->
+  <section class="panel tr">
+    <header><h2>VITALS</h2><span class="rule"></span><span id="state" class="state">IDLE</span></header>
+
+    <div class="meter">
+      <div class="mrow"><span>STAMINA <i>context left</i></span><b id="staminaPct">100%</b></div>
+      <div class="bars" id="stamina"></div>
+      <div class="sub" id="ctxNums">—</div>
+    </div>
+
+    <div class="meter">
+      <div class="mrow"><span>RECOVERY <i>weekly quota</i></span><b id="recoveryPct">—</b></div>
+      <div class="bars" id="recovery"></div>
+    </div>
+
+    <div class="grid2">
+      <div><span class="lbl">SET</span><b id="setNo" class="xl">0</b></div>
+      <div><span class="lbl">REPS</span><b id="repNo" class="xl">0</b></div>
+      <div><span class="lbl">CALORIES</span><b id="calories">0</b><span class="sub">output tokens</span></div>
+      <div><span class="lbl">CREDITS</span><b id="credits">—</b><span class="sub">balance</span></div>
+    </div>
+  </section>
+
+  <!-- log / replay / scores -->
+  <section class="panel feedpanel">
+    <header>
+      <div class="tabs" role="tablist">
+        <button class="tab on" data-tab="chat" role="tab">CHAT</button>
+        <button class="tab" data-tab="log" role="tab">LOG</button>
+        <button class="tab" data-tab="replay" role="tab">REPLAY</button>
+        <button class="tab" data-tab="scores" role="tab">SCORES</button>
+      </div>
+      <span class="rule"></span>
+      <button id="wide" class="btn ghost" title="Camera mode">CAM AUTO</button>
     </header>
 
-    <section class="stage-content">
-      <div id="athlete3d" class="athlete-frame">
-        <canvas id="arena" aria-label="The Codex athlete performing the current action"></canvas>
-        <div class="athlete-label"><span id="aEx">RACKED</span><strong id="aKg"></strong><span id="aFile">waiting for the agent</span></div>
+    <!-- talk to the athlete: every line runs Codex in the same session -->
+    <div id="tab-chat" class="tabbody">
+      <div id="chat" class="chat" role="log" aria-live="polite">
+        <div class="chatempty">Tell the athlete what to do. Every message runs Codex in your
+          project and keeps the same session, so you can follow up.</div>
       </div>
-      <div id="liveCaption" class="live-caption" role="status" aria-live="polite">
-        <span class="pulse" aria-hidden="true"></span><span id="arenaZone">Ready</span>
-      </div>
-    </section>
-
-    <section id="askPanel" class="floating-card question-card" hidden aria-labelledby="askTitle">
-      <div class="eyebrow">Question from Codex</div>
-      <h2 id="askTitle">A quick decision is needed</h2>
-      <div id="askQ" class="askq"></div>
-      <textarea id="askText" rows="2" placeholder="Type your answer"></textarea>
-      <div class="actions"><button type="button" id="askSkip" class="btn">Dismiss</button><button type="button" id="askSend" class="btn primary">Send answer</button></div>
-    </section>
-
-    <section id="resultCard" class="floating-card result-card" hidden aria-live="polite">
-      <div class="result-icon" aria-hidden="true">✓</div>
-      <div><div class="eyebrow">Workout complete</div><h2 id="resultMessage">Codex finished the set</h2><div id="resultStats" class="result-stats"></div></div>
-    </section>
-
-    <section id="workoutPanel" class="composer-shell">
-      <div class="prompt-intro"><span class="spark">✦</span><div><strong>What do you want to improve?</strong><span>Describe a task, or choose a quick workout.</span></div></div>
-      <div id="quests" class="quests"></div>
-      <div id="questInput" class="quest-input" hidden>
-        <span id="questNeed" class="sub">—</span>
-        <textarea id="questText" rows="2" placeholder="Add one detail"></textarea>
-        <div class="actions"><button type="button" id="questBack" class="btn">Back</button><button type="button" id="questGo" class="btn primary">Start</button></div>
-      </div>
-      <div class="composer">
-        <textarea id="prompt" rows="2" placeholder="Ask Codex to improve this project…" aria-label="Workout prompt"></textarea>
-        <div class="composer-tools">
-          <button type="button" id="advBtn" class="tool-btn" aria-pressed="false">Options</button>
-          <div class="weightpick" id="diffPick" role="radiogroup" aria-label="Workout intensity">
-            <button type="button" class="wbtn" data-diff="easy" role="radio" aria-checked="false">Quick</button>
-            <button type="button" class="wbtn on" data-diff="normal" role="radio" aria-checked="true">Balanced</button>
-            <button type="button" class="wbtn" data-diff="hard" role="radio" aria-checked="false">Deep</button>
-          </div>
-          <button type="button" id="train" class="send-btn" aria-label="Start workout">↑</button>
+      <div class="chatbox">
+        <textarea id="chatText" rows="2" placeholder="e.g. add a function that formats rupees, with a test&#10;(cmd+enter to send)"></textarea>
+        <div class="actions">
+          <button id="chatSend" class="btn primary">SEND</button>
+          <button id="chatNew" class="btn">NEW SESSION</button>
         </div>
       </div>
-      <div id="advanced" class="advanced" hidden>
-        <label>Model<select id="modelSel"><option value="">As configured</option><option value="gpt-5.6-sol">gpt-5.6-sol</option><option value="gpt-5.6-luna">gpt-5.6-luna</option><option value="gpt-5.6-terra">gpt-5.6-terra</option><option value="gpt-5.4-mini">gpt-5.4-mini</option></select></label>
-        <label>Effort<select id="effortSel"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select></label>
-        <label>Permissions<select id="spotterSel"><option value="read-only">Read only</option><option value="workspace-write" selected>Workspace write</option><option value="danger-full-access">Full access</option></select></label>
+    </div>
+
+    <div id="tab-log" class="tabbody" hidden>
+      <div id="feed" class="feed" role="log" aria-live="polite"></div>
+    </div>
+
+    <div id="tab-replay" class="tabbody" hidden>
+      <div class="sub" id="replayNote">Watch a past Codex session as a workout.</div>
+      <div class="replayctl">
+        <span class="lbl">SPEED</span>
+        <select id="speedSel">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="4" selected>4x</option>
+          <option value="8">8x</option>
+          <option value="16">16x</option>
+        </select>
+        <button id="replayStop" class="btn danger" disabled>STOP</button>
       </div>
-      <button type="button" id="rack" class="stop-btn" disabled>Stop workout</button>
-    </section>
-  </main>
+      <div id="sessions" class="sessions"></div>
+    </div>
 
-  <div id="intro" class="intro" hidden>
-    <div class="introbox"><span class="brand-mark large">C</span><h1>Welcome to Codex Gym</h1><p>Turn work on your project into a live workout. Describe the result you want and watch Codex train.</p><ol class="rules"><li>Pick a suggested workout or write your own.</li><li>Watch the athlete move through your project.</li><li>Answer a question if Codex needs a decision.</li></ol><button type="button" id="introGo" class="btn primary">Enter the gym</button></div>
-  </div>
+    <div id="tab-scores" class="tabbody" hidden>
+      <div class="sub" id="scoresNote">—</div>
+      <div id="scores" class="scores"></div>
+      <div class="lnote"><b>CAL / LIFT</b> = output tokens burned per surviving edit. Lower is a more efficient athlete.</div>
+    </div>
+  </section>
 
-  <div id="bmenu" class="floating-card bmenu" hidden>
-    <header><div><span id="bmKind" class="eyebrow">—</span><h2 id="bmName">—</h2></div><button type="button" id="bmClose" class="icon-action" aria-label="Close">×</button></header>
-    <div id="bmPath" class="sub">—</div><div id="bmStats"></div><div id="bmFiles" class="bmfiles"></div><div class="eyebrow">Suggested workouts</div><div id="bmActions" class="bmactions"></div>
-  </div>
+  <!-- the arena: the lift, big enough to actually read -->
+  <section class="panel arena">
+    <header><h2>ARENA</h2><span class="rule"></span><span id="arenaZone" class="tag dim">—</span></header>
+    <div class="arenawrap">
+      <canvas id="arena" aria-label="Close-up of the agent performing the current exercise"></canvas>
+      <div class="arenaover">
+        <div id="aEx" class="aex">RACKED</div>
+        <div id="aKg" class="akg"></div>
+        <div id="aFile" class="afile">waiting for the agent</div>
+      </div>
+    </div>
+  </section>
 
-  <aside id="projectDrawer" class="drawer" popover aria-label="Project drawer">
-    <header><div><span class="eyebrow">Workspace</span><h2>Project</h2></div><button type="button" class="icon-action" popovertarget="projectDrawer" popovertargetaction="hide" aria-label="Close project drawer">×</button></header>
-    <section><div class="big" id="floorStats">—</div><label class="field">Project<select id="repoSel"></select></label><button type="button" id="newGymBtn" class="btn">New project</button><div id="newGymBox" hidden><input id="newGymName" type="text" placeholder="my-project" maxlength="40"><div class="actions"><button type="button" id="newGymCancel" class="btn">Cancel</button><button type="button" id="newGymGo" class="btn primary">Create</button></div></div><div id="truncNote" class="sub warn"></div></section>
-    <section><div class="section-head"><h3>Progress</h3><span id="plBranch" class="tag">—</span></div><div id="stages" class="stages"></div><div id="plNote" class="sub">—</div></section>
-    <section><h3>Personal records</h3><div class="prgrid"><div><span>Level</span><b id="level">1</b></div><div><span>Streak</span><b id="streak">0d</b></div><div><span>Heaviest</span><b id="heaviest">0kg</b></div><div><span>Volume</span><b id="volume">0</b></div><div><span>Reps</span><b id="totalReps">0</b></div><div><span>Sets</span><b id="totalSets">0</b></div></div><div id="heaviestFile" class="sub"></div></section>
-  </aside>
+  <!-- the agent stopped to ask: it is blocked until you answer -->
+  <section class="panel askpanel" id="askPanel" hidden>
+    <header><h2>THE ATHLETE IS ASKING</h2><span class="rule"></span>
+      <span class="tag" style="color:var(--iron)">BLOCKED</span>
+    </header>
+    <div id="askQ" class="askq"></div>
+    <textarea id="askText" rows="2" placeholder="answer, then SEND to resume the same session"></textarea>
+    <div class="actions">
+      <button id="askSend" class="btn primary">SEND</button>
+      <button id="askSkip" class="btn">DISMISS</button>
+    </div>
+  </section>
 
-  <aside id="activityDrawer" class="drawer wide-drawer" popover aria-label="Activity drawer">
-    <header><div><span class="eyebrow">Codex session</span><h2>Activity</h2></div><button type="button" class="icon-action" popovertarget="activityDrawer" popovertargetaction="hide" aria-label="Close activity drawer">×</button></header>
-    <div class="tabs" role="tablist"><button type="button" class="tab on" data-tab="chat" role="tab">Chat</button><button type="button" class="tab" data-tab="log" role="tab">Log</button><button type="button" class="tab" data-tab="replay" role="tab">Replay</button><button type="button" class="tab" data-tab="scores" role="tab">Scores</button></div>
-    <div id="tab-chat" class="tabbody"><div id="chat" class="chat" role="log" aria-live="polite"><div class="chatempty">Follow up with Codex in the same session.</div></div><div class="chatbox"><textarea id="chatText" rows="2" placeholder="Send a follow-up"></textarea><div class="actions"><button type="button" id="chatNew" class="btn">New session</button><button type="button" id="chatSend" class="btn primary">Send</button></div></div></div>
-    <div id="tab-log" class="tabbody" hidden><div id="feed" class="feed" role="log" aria-live="polite"></div></div>
-    <div id="tab-replay" class="tabbody" hidden><div id="replayNote" class="sub">Watch a past session.</div><div class="replayctl"><label>Speed<select id="speedSel"><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option><option value="8">8×</option><option value="16">16×</option></select></label><button type="button" id="replayStop" class="btn" disabled>Stop</button></div><div id="sessions" class="sessions"></div></div>
-    <div id="tab-scores" class="tabbody" hidden><div id="scoresNote" class="sub">—</div><div id="scores" class="scores"></div></div>
-  </aside>
+  <!-- dispatch: pick a goal in plain words, the app writes the prompt -->
+  <section class="panel workout" id="workoutPanel">
+    <header><h2>TODAY'S WORKOUT</h2><span class="rule"></span>
+      <button id="advBtn" class="btn ghost" aria-pressed="false">ADVANCED</button>
+    </header>
 
-  <aside id="settingsDrawer" class="drawer" popover aria-label="Settings drawer">
-    <header><div><span class="eyebrow">Preferences</span><h2>Settings</h2></div><button type="button" class="icon-action" popovertarget="settingsDrawer" popovertargetaction="hide" aria-label="Close settings drawer">×</button></header>
-    <section><h3>Workout controls</h3><div class="settings-actions"><button type="button" id="helpBtn" class="btn">Show introduction</button><button type="button" id="sndBtn" class="btn" aria-pressed="true">Sound on</button><button type="button" id="wide" class="btn" title="Camera mode">Camera auto</button></div></section>
-    <section><h3>Vitals</h3><div class="vitals"><div><span>State</span><b id="state">IDLE</b></div><div><span>Stamina</span><b id="staminaPct">100%</b></div><div id="stamina" class="bars"></div><div id="ctxNums" class="sub">—</div><div><span>Recovery</span><b id="recoveryPct">—</b></div><div id="recovery" class="bars"></div><div class="stat-grid"><div><span>Set</span><b id="setNo">0</b></div><div><span>Reps</span><b id="repNo">0</b></div><div><span>Calories</span><b id="calories">0</b></div><div><span>Credits</span><b id="credits">—</b></div></div></div></section>
-    <section><h3>Map legend</h3><div id="kinds" class="lgrid"></div></section>
-    <footer class="nowlifting"><span>Athlete</span><b id="athlete">—</b><span id="model" class="sub"></span><span>Effort</span><b id="effort">—</b><span>Permissions</span><b id="spotter">—</b><span id="hintText" class="sub">Drag to pan · scroll to zoom</span></footer>
-  </aside>
+    <div class="weightpick" id="diffPick" role="radiogroup" aria-label="How hard should the athlete work">
+      <button class="wbtn" data-diff="easy" role="radio" aria-checked="false">
+        <b>WARM-UP</b><span>fast &amp; cheap</span></button>
+      <button class="wbtn on" data-diff="normal" role="radio" aria-checked="true">
+        <b>WORKING SET</b><span>balanced</span></button>
+      <button class="wbtn" data-diff="hard" role="radio" aria-checked="false">
+        <b>HEAVY</b><span>thinks harder</span></button>
+    </div>
 
-  <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
-  <script type="module" src="/static/app.js"></script>
+    <div id="quests" class="quests"></div>
+
+    <!-- shown only for quests that need a line of input -->
+    <div id="questInput" hidden>
+      <div class="sub" id="questNeed">—</div>
+      <textarea id="questText" rows="2" placeholder="one line is enough"></textarea>
+      <div class="actions">
+        <button id="questGo" class="btn primary">START</button>
+        <button id="questBack" class="btn">BACK</button>
+      </div>
+    </div>
+
+    <!-- power controls, hidden by default -->
+    <div id="advanced" hidden>
+      <textarea id="prompt" rows="2" placeholder="or write the instruction yourself&#10;(cmd+enter)"></textarea>
+      <label class="field">
+        <span>ATHLETE</span>
+        <select id="modelSel">
+          <option value="">AS CONFIGURED</option>
+          <option value="gpt-5.6-sol">POWERLIFTER · gpt-5.6-sol</option>
+          <option value="gpt-5.6-luna">OLYMPIC LIFTER · gpt-5.6-luna</option>
+          <option value="gpt-5.6-terra">STRONGMAN · gpt-5.6-terra</option>
+          <option value="gpt-5.4-mini">SPRINTER · gpt-5.4-mini</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>WEIGHT</span>
+        <select id="effortSel">
+          <option value="low">LOW · warm-up</option>
+          <option value="medium" selected>MEDIUM · working set</option>
+          <option value="high">HIGH · heavy</option>
+          <option value="xhigh">XHIGH · max effort</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>SPOTTER</span>
+        <select id="spotterSel">
+          <option value="read-only">WATCH ONLY · no writes</option>
+          <option value="workspace-write" selected>SPOTTING · writes in this project</option>
+          <option value="danger-full-access">NO SPOTTER · full access</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button id="train" class="btn primary">TRAIN</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="rack" class="btn danger" disabled>RACK IT</button>
+    </div>
+  </section>
+
+  <!-- records -->
+  <section class="panel prboard">
+    <header><h2>PERSONAL RECORDS</h2><span class="rule"></span></header>
+    <div class="prgrid">
+      <div class="prrow"><span>LEVEL</span><b id="level">1</b></div>
+      <div class="prrow"><span>STREAK</span><b id="streak">0d</b></div>
+      <div class="prrow"><span>HEAVIEST</span><b id="heaviest">0kg</b></div>
+      <div class="prrow"><span>VOLUME</span><b id="volume">0</b></div>
+      <div class="prrow"><span>REPS</span><b id="totalReps">0</b></div>
+      <div class="prrow"><span>SETS</span><b id="totalSets">0</b></div>
+    </div>
+    <div class="sub" id="heaviestFile"></div>
+  </section>
+
+  <section id="proofFlow" class="proof-flow" aria-live="polite">
+    <div class="proof-steps"><b data-proof="select">SELECT</b><b data-proof="edit">EDIT</b><b data-proof="verify">VERIFY</b><b data-proof="result">RESULT</b></div>
+    <span id="proofSummary">Choose a task to start.</span>
+  </section>
+
+  <!-- where this project stands, end to end -->
+  <section class="panel pipeline">
+    <header><h2>PROJECT</h2><span class="rule"></span>
+      <span id="plBranch" class="tag dim">—</span>
+    </header>
+    <div class="stages" id="stages"></div>
+    <div class="sub" id="plNote">—</div>
+  </section>
+
+  <!-- status strip -->
+  <section class="panel nowlifting">
+    <span class="lbl">ATHLETE</span>
+    <b id="athlete">—</b>
+    <span id="model" class="sub"></span>
+    <span class="lbl">WEIGHT</span><b id="effort">—</b>
+    <span class="lbl">SPOTTER</span><b id="spotter">—</b>
+    <span class="rule"></span>
+    <span id="hintText" class="sub">tap a station to put the agent to work there · drag to pan · scroll to zoom · double-click to fit</span>
+  </section>
+
+</div>
+
+<script type="module" src="/static/app.js"></script>
 </body>
 </html>

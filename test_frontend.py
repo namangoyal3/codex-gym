@@ -10,28 +10,33 @@ ROOT = pathlib.Path(__file__).parent
 
 
 class FrontendContractTest(unittest.TestCase):
-    def test_prompt_workout_shell_is_wired(self):
+    def test_game_surface_and_proof_strip_are_present(self):
         html = (ROOT / "static/index.html").read_text()
-        app = (ROOT / "static/app.js").read_text()
+        css = (ROOT / "static/gym.css").read_text()
 
         for element_id in (
-            "workoutStage",
-            "athlete3d",
-            "chatText",
-            "chatSend",
-            "liveCaption",
-            "resultCard",
-            "projectDrawer",
-            "activityDrawer",
-            "settingsDrawer",
+            "stage",
+            "feed",
+            "arena",
+            "workoutPanel",
+            "proofFlow",
+            "proofSummary",
         ):
             self.assertIn(f'id="{element_id}"', html)
 
-        self.assertIn("./athlete3d.js", app)
-        self.assertIn("setExperienceState", app)
-        self.assertIn("model: $('modelSel').value || null", app)
-        self.assertIn("if (S.question) break", app)
-        self.assertIn("!m.running && m.status", app)
+        for selector in ("hud", "panel", "row", "bubble", "stg", "proof-flow"):
+            self.assertIn(f".{selector} {{", css)
+
+        for phase in ("select", "edit", "verify", "result"):
+            self.assertIn(f'<b data-proof="{phase}">{phase.upper()}</b>', html)
+
+        self.assertIn(
+            '<span id="proofSummary">Choose a task to start.</span>', html
+        )
+        self.assertLess(
+            html.index('id="proofFlow"'),
+            html.index('<section class="panel pipeline">'),
+        )
 
     def test_git_porcelain_keeps_leading_status_column(self):
         with tempfile.TemporaryDirectory() as root:
