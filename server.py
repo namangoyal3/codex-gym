@@ -54,6 +54,7 @@ RACK, TREADMILL, DUMBBELL, MAT, BAG = "rack", "treadmill", "dumbbell", "mat", "b
 MAX_EQUIPMENT = 420          # floor gets unreadable past this; truncation is logged
 MAX_PER_ZONE = 48
 MAX_READ_BYTES = 2_000_000
+STARTING = object()
 
 
 def is_test_path(rel):
@@ -476,6 +477,7 @@ class Gym(object):
     def __init__(self, repo, records):
         self.records = records
         self.lock = threading.Lock()
+        self.run_lock = threading.Lock()
         self.subs = []
         self.feed = []
         self.seq = 0
@@ -493,6 +495,7 @@ class Gym(object):
         self.thread_id = None
         self.out_tokens = 0          # cumulative calories for the exec stream
         self.workout = None          # live subprocess.Popen for dispatched runs
+        self.run_generation = 0
         self.replaying = None        # {"file","speed"} while replaying a session
         self.replay_stop = None
         self.pending_question = None
@@ -508,7 +511,9 @@ class Gym(object):
         A dispatched run also writes a rollout file, so the spectator would
         double-count every event. One athlete, one gym: the exec stream wins.
         """
-        return self.workout is not None and self.workout.poll() is None
+        with self.run_lock:
+            return self.workout is STARTING or (
+                self.workout is not None and self.workout.poll() is None)
 
     def busy(self):
         return self.dispatching() or self.replaying is not None
@@ -563,6 +568,36 @@ class Gym(object):
         self.final_response = None
         self.pending_question = None
         self.emit("lifecycle", status="running")
+
+    def reserve_run(self, resume=None):
+        with self.run_lock:
+            if self.workout is STARTING or (
+                    self.workout is not None and self.workout.poll() is None):
+                raise ValueError("already training - rack it first")
+            if self.replaying is not None:
+                raise ValueError("replay is running - stop it first")
+            self.run_generation += 1
+            generation = self.run_generation
+            self.workout = STARTING
+            if not resume:
+                self.thread_id = None
+        self.begin_run()
+        return generation
+
+    def attach_run(self, generation, proc):
+        with self.run_lock:
+            if generation == self.run_generation and self.workout is STARTING:
+                self.workout = proc
+
+    def complete_run(self, generation, proc, status, error=None):
+        with self.run_lock:
+            if generation != self.run_generation or self.workout is not proc:
+                return False
+            self.workout = None
+        self.set_hud(state="DONE", exercise=RACKED)
+        self.finish_run(status, error)
+        self.emit("running", running=False)
+        return True
 
     def finish_run(self, status, error=None):
         self.run_status = status
@@ -1128,23 +1163,21 @@ def dispatch(gym, prompt, model, effort, sandbox, cwd, resume=None):
     cwd = os.path.abspath(os.path.expanduser(cwd or gym.stats["root"]))
     if not os.path.isdir(cwd):
         raise ValueError("no such directory")
-    if gym.dispatching():
-        raise ValueError("already training - rack it first")
-    if gym.replaying is not None:
-        raise ValueError("replay is running - stop it first")
-
     exe = shutil.which("codex")
     if not exe:
         raise ValueError("codex not on PATH")
 
     cmd = exec_cmd(exe, prompt, model, effort, sandbox, cwd, resume)
-
-    proc = subprocess.Popen(
-        cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, text=True, bufsize=1,
-        env=dict(os.environ, RUST_LOG="error"))
-    gym.workout = proc
-    gym.begin_run()
+    generation = gym.reserve_run(resume)
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, bufsize=1,
+            env=dict(os.environ, RUST_LOG="error"))
+    except OSError as exc:
+        gym.complete_run(generation, STARTING, "failed", str(exc))
+        raise ValueError("could not start codex: %s" % exc)
+    gym.attach_run(generation, proc)
     gym.emit("asking", question=None)
     gym.set_hud(athlete=athlete_for_model(model or "gpt-5.6"), effort=effort,
                 spotter=sandbox, state="WARMING UP")
@@ -1169,12 +1202,10 @@ def dispatch(gym, prompt, model, effort, sandbox, cwd, resume=None):
             if proc.returncode not in (0, -15, -2):
                 gym.emit("note", text="codex exit %s %s" % (proc.returncode, err[-300:]),
                          tone="bad")
-            gym.set_hud(state="DONE", exercise=RACKED)
             status = "stopped" if proc.returncode in (-15, -2) else (
                 "completed" if proc.returncode == 0 else "failed")
-            gym.workout = None
-            gym.finish_run(status, err if status == "failed" else None)
-            gym.emit("running", running=False)
+            gym.complete_run(generation, proc, status,
+                             err if status == "failed" else None)
 
     threading.Thread(target=pump, daemon=True).start()
     return True
@@ -1279,7 +1310,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/rack":
             proc = self.gym.workout
-            if proc is not None and proc.poll() is None:
+            if proc is not None and proc is not STARTING and proc.poll() is None:
                 proc.terminate()
                 self.gym.emit("note", text="RACK IT - workout stopped", tone="bad")
                 return self._json(200, {"ok": True})
@@ -2120,6 +2151,31 @@ def selftest():
         "running", "completed"]
     assert [e["text"] for e in events if e["kind"] == "result"] == [
         "Finished cleanly."]
+
+    class FakeProc(object):
+        def __init__(self, code=None):
+            self.code = code
+
+        def poll(self):
+            return self.code
+
+    gym.thread_id = "old-thread"
+    old_generation = gym.reserve_run()
+    assert gym.thread_id is None                    # a fresh run cannot resume stale state
+    assert gym.complete_run(old_generation, STARTING, "completed")
+    gym.thread_id = "resume-thread"
+    generation = gym.reserve_run("resume-thread")
+    assert gym.thread_id == "resume-thread"
+    current = FakeProc()
+    gym.attach_run(generation, current)
+    try:
+        gym.reserve_run()
+        raise AssertionError("admitted an overlapping run")
+    except ValueError:
+        pass
+    assert not gym.complete_run(old_generation, STARTING, "failed", "stale")
+    assert gym.run_status == "running" and gym.workout is current
+    assert gym.complete_run(generation, current, "stopped")
 
     # spectator must stand down while we own a dispatched run, or every event
     # gets counted twice
