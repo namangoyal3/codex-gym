@@ -496,6 +496,8 @@ class Gym(object):
         self.replaying = None        # {"file","speed"} while replaying a session
         self.replay_stop = None
         self.pending_question = None
+        self.run_status = "idle"
+        self.final_response = None
         self.pending_tool = None     # tool call awaiting its result
         self.last_test = None        # True/False once tests have run
         self.chat = []                # the conversation, newest last
@@ -556,6 +558,23 @@ class Gym(object):
         self.set_hud(state="ASKING")
         self.emit("asking", question=question[:1200])
 
+    def begin_run(self):
+        self.run_status = "running"
+        self.final_response = None
+        self.pending_question = None
+        self.emit("lifecycle", status="running")
+
+    def finish_run(self, status, error=None):
+        self.run_status = status
+        self.emit("lifecycle", status=status, error=(error or "")[:1200] or None)
+
+    def result(self, text):
+        text = (text or "").strip()
+        if not text:
+            return
+        self.final_response = text[:8000]
+        self.emit("result", text=self.final_response, thread_id=self.thread_id)
+
     # -- fanout ---------------------------------------------------------
     def subscribe(self):
         q = queue.Queue(maxsize=600)
@@ -594,6 +613,8 @@ class Gym(object):
                 "stats": self.stats, "hud": dict(self.hud),
                 "feed": list(self.feed[-40:]), "records": self.records.snapshot(),
                 "running": self.busy(), "replaying": self.replaying,
+                "status": self.run_status, "thread_id": self.thread_id,
+                "result": self.final_response,
                 "question": self.pending_question,
                 "chat": list(self.chat[-40:]),
             }
@@ -935,7 +956,7 @@ def handle_exec_event(gym, ev):
         gym.out_tokens += usage.get("output_tokens") or 0   # usage is per turn
         if in_context:
             gym.tokens(in_context, gym.out_tokens, gym.hud.get("context"))
-        gym.end_set(aborted=(typ == "turn.failed"))
+        gym.end_set(gym.final_response, aborted=(typ == "turn.failed"))
         return
 
     item = ev.get("item") or {}
@@ -971,6 +992,7 @@ def handle_exec_event(gym, ev):
     elif itype == "agent_message":
         if not started:
             text = item.get("text") or ""
+            gym.result(text)
             gym.emit("note", text=text[:600], tone="coach")
             gym.say("coach", text)
     elif itype == "error":
@@ -1122,7 +1144,7 @@ def dispatch(gym, prompt, model, effort, sandbox, cwd, resume=None):
         stderr=subprocess.PIPE, text=True, bufsize=1,
         env=dict(os.environ, RUST_LOG="error"))
     gym.workout = proc
-    gym.pending_question = None
+    gym.begin_run()
     gym.emit("asking", question=None)
     gym.set_hud(athlete=athlete_for_model(model or "gpt-5.6"), effort=effort,
                 spotter=sandbox, state="WARMING UP")
@@ -1148,6 +1170,10 @@ def dispatch(gym, prompt, model, effort, sandbox, cwd, resume=None):
                 gym.emit("note", text="codex exit %s %s" % (proc.returncode, err[-300:]),
                          tone="bad")
             gym.set_hud(state="DONE", exercise=RACKED)
+            status = "stopped" if proc.returncode in (-15, -2) else (
+                "completed" if proc.returncode == 0 else "failed")
+            gym.workout = None
+            gym.finish_run(status, err if status == "failed" else None)
             gym.emit("running", running=False)
 
     threading.Thread(target=pump, daemon=True).start()
@@ -2055,6 +2081,13 @@ def selftest():
     assert gym.hud["state"] == "RESTING"
 
     # exec schema (as observed from `codex exec --json`)
+    state = gym.snapshot()
+    assert state["status"] == "idle"
+    assert state["thread_id"] is None and state["result"] is None
+    lifecycle = gym.subscribe()
+    gym.begin_run()
+    assert gym.snapshot()["status"] == "running"
+    handle_exec_event(gym, {"type": "thread.started", "thread_id": "thread-1"})
     handle_exec_event(gym, {"type": "turn.started"})
     handle_exec_event(gym, {"type": "item.completed", "item": {
         "type": "command_execution", "command": "/bin/zsh -lc 'ls -a'", "exit_code": 0}})
@@ -2069,6 +2102,24 @@ def selftest():
             {"path": "src/stats.py", "unified_diff": DIFF}]}})
     assert gym.hud["reps"] == before + 2, gym.hud["reps"]      # two files, two lifts
     assert gym.hud["exercise"] == DEADLIFT
+    handle_exec_event(gym, {"type": "item.completed", "item": {
+        "type": "agent_message", "text": "Finished cleanly."}})
+    assert gym.snapshot()["result"] == "Finished cleanly."
+    handle_exec_event(gym, {"type": "turn.completed", "usage": {}})
+    gym.finish_run("completed")
+    state = gym.snapshot()
+    assert state["status"] == "completed" and state["thread_id"] == "thread-1"
+    events = []
+    while True:
+        try:
+            events.append(lifecycle.get_nowait())
+        except queue.Empty:
+            break
+    gym.unsubscribe(lifecycle)
+    assert [e["status"] for e in events if e["kind"] == "lifecycle"] == [
+        "running", "completed"]
+    assert [e["text"] for e in events if e["kind"] == "result"] == [
+        "Finished cleanly."]
 
     # spectator must stand down while we own a dispatched run, or every event
     # gets counted twice
