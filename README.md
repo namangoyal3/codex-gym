@@ -2,8 +2,6 @@
 
 Your repo is a gym. Your Codex agent is the athlete. You watch it train, in real time.
 
-**▶ [Watch the 70-second demo](https://github.com/namangoyal3/codex-gym/blob/main/demo.mp4)** — the gym floor, a workout, and the agent shipping a change.
-
 Codex Gym turns a repository into a gym floor you can tap. Every folder becomes a
 training station — source code gets a power rack, tests get a bank of treadmills,
 config gets a dumbbell rack, docs get a stretch studio, markup gets a boxing
@@ -15,6 +13,10 @@ burning becomes stamina.
 Nothing is a mock-up. The agent edits your real repository, the base grows as it
 writes files, and PROJECT tracks the whole thing from PLANNED to SHIPPED using
 git and your actual test results.
+
+## Demo video
+
+**▶ [Watch the 70-second demo](https://drive.google.com/file/d/1b9aQo_nAt4xKXYsYrUtrWRhtZb5X5ERd/view?usp=sharing)** — the gym floor, a workout, and the agent shipping a change.
 
 ## Play it
 
