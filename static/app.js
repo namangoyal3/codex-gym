@@ -1134,14 +1134,17 @@ document.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 // ----------------------------------------------------------------- intro
 
 const introEl = $('intro');
+const hud = document.querySelector('.hud');
 let introOpener = null;
 function showIntro() {
   introOpener = document.activeElement;
+  hud.inert = true;
   introEl.hidden = false;
   $('introGo').focus();
 }
 function hideIntro() {
   introEl.hidden = true;
+  hud.inert = false;
   if (introOpener && introOpener.isConnected) introOpener.focus();
   introOpener = null;
   try { localStorage.setItem('codexgym.onboarding.v2', '1'); } catch (e) { /* private mode */ }

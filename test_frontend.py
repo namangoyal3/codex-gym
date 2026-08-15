@@ -48,8 +48,12 @@ class FrontendContractTest(unittest.TestCase):
         hide_intro = app.split("function hideIntro()", 1)[1].split("$('introGo').onclick", 1)[0]
         self.assertIn("introOpener = document.activeElement", show_intro)
         self.assertIn("$('introGo').focus()", show_intro)
+        self.assertIn("const hud = document.querySelector('.hud')", app)
+        self.assertIn("hud.inert = true", show_intro)
+        self.assertIn("hud.inert = false", hide_intro)
         self.assertIn("introOpener && introOpener.isConnected", hide_intro)
         self.assertIn("introOpener.focus()", hide_intro)
+        self.assertLess(hide_intro.index("hud.inert = false"), hide_intro.index("introOpener.focus()"))
 
     def test_game_surface_and_proof_strip_are_present(self):
         html = (ROOT / "static/index.html").read_text()
