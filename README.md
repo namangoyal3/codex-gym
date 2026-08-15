@@ -2,7 +2,9 @@
 
 Your repo is a gym. Your Codex agent is the athlete. You watch it train, in real time.
 
-https://github.com/namangoyal3/codex-gym/raw/main/demo.mp4
+<video src="https://github.com/namangoyal3/codex-gym/raw/main/demo.mp4" controls muted playsinline width="100%"></video>
+
+[Watch the demo](https://github.com/namangoyal3/codex-gym/raw/main/demo.mp4)
 
 Codex Gym turns a repository into a gym floor you can tap. Every folder becomes a
 training station — source code gets a power rack, tests get a bank of treadmills,
