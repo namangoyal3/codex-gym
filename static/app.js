@@ -595,7 +595,10 @@ function paintRunning() {
 
 function connect() {
   const es = new EventSource('/api/events');
-  es.onmessage = (ev) => { try { apply(JSON.parse(ev.data)); } catch (e) { /* skip */ } };
+  es.onmessage = (ev) => {
+    if (demoRunning) return;
+    try { apply(JSON.parse(ev.data)); } catch (e) { /* skip */ }
+  };
   es.onerror = () => { $('conn').textContent = 'RECONNECTING'; };
   es.onopen = () => { $('conn').textContent = 'LIVE'; };
 }

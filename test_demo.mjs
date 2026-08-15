@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { demoSnapshot, demoTimeline } from './static/demo.js';
 
 const snapshot = demoSnapshot();
@@ -14,4 +15,13 @@ assert.ok(timeline.some(({ event }) => event.kind === 'rep' && event.exercise ==
 assert.deepEqual(kinds.slice(-3), ['result', 'lifecycle', 'running']);
 assert.ok(timeline.every(({ at }, index) => index === 0 || at > timeline[index - 1].at));
 assert.ok(timeline.at(-1).at <= 45000);
+
+const app = readFileSync(new URL('./static/app.js', import.meta.url), 'utf8');
+const connect = app.split('function connect()', 2)[1].split('// ----------------------------------------------------------------- inputs', 2)[0];
+const onmessage = connect.split('es.onmessage =', 2)[1].split('es.onerror', 2)[0];
+assert.ok(
+  onmessage.indexOf('if (demoRunning) return') < onmessage.indexOf('apply(JSON.parse(ev.data))')
+    && onmessage.includes('if (demoRunning) return'),
+  'live SSE must pause during the scripted demo',
+);
 console.log('scripted demo contract OK');
